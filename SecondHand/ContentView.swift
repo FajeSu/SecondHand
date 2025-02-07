@@ -31,7 +31,7 @@ func setCrumbDate() {
     
     let newStr: String = dateFormatter.string(from: Date())
     
-    if (newStr + " ▶").utf8CString.count <= 256 {
+    if newStr.utf8CString.count <= 256 {
         StatusManager.sharedInstance().setCrumb(newStr)
     } else {
         StatusManager.sharedInstance().setCrumb("Length Error")

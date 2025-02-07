@@ -287,17 +287,13 @@ typedef struct {
 - (NSString*) getCrumbOverride {
     StatusBarOverrideData *overrides = [self getOverrides];
     NSString* crumb = @(overrides->values.breadcrumbTitle);
-    if (crumb.length > 1) {
-        return [crumb substringToIndex:[crumb length] - 2];
-    } else {
-        return @"";
-    }
+    return crumb;
 }
 
 - (void) setCrumb:(NSString*)text {
     StatusBarOverrideData *overrides = [self getOverrides];
     overrides->overrideBreadcrumb = 1;
-    strcpy(overrides->values.breadcrumbTitle, [[text stringByAppendingString:@" ▶"] cStringUsingEncoding:NSUTF8StringEncoding]);
+    strcpy(overrides->values.breadcrumbTitle, [text cStringUsingEncoding:NSUTF8StringEncoding]);
     [self applyChanges:overrides];
 }
 
