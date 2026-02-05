@@ -14,9 +14,9 @@ func setTimeSeconds() {
     let hourFinal = UserDefaults.standard.bool(forKey: "Time24Hour") ? hour : (hour%12 == 0 ? 12 : hour%12)
     let minutes = calendar.component(.minute, from: date)
     let seconds = calendar.component(.second, from: date)
-    
+
     let newStr: String = "\(hourFinal):\(String(format: "%02d", minutes)):\(String(format: "%02d", seconds))"
-    
+
     if newStr.utf8CString.count <= 64 {
         StatusManager.sharedInstance().setTime(newStr)
     } else {
@@ -28,9 +28,9 @@ func setCrumbDate() {
     let dateFormatter = DateFormatter()
     dateFormatter.dateFormat = UserDefaults.standard.string(forKey: "DateFormat") ?? "MM/dd"
     dateFormatter.locale = Locale(identifier: Locale.preferredLanguages.first!)
-    
+
     let newStr: String = dateFormatter.string(from: Date())
-    
+
     if (newStr + " ▶").utf8CString.count <= 256 {
         StatusManager.sharedInstance().setCrumb(newStr)
     } else {
@@ -39,16 +39,16 @@ func setCrumbDate() {
 }
 
 struct ContentView: View {
+    private let reEnableDateActivityType = (Bundle.main.bundleIdentifier != nil) ? "\(Bundle.main.bundleIdentifier!).reEnableDate" : nil
+
     @State private var timeTextEnabled: Bool = StatusManager.sharedInstance().isTimeOverridden()
     @State private var crumbTextEnabled: Bool = StatusManager.sharedInstance().isCrumbOverridden()
     @State private var dateFormat: String = UserDefaults.standard.string(forKey: "DateFormat") ?? "MM/dd"
-    
+
     //@State private var timeAs24: Bool = UserDefaults.standard.bool(forKey: "Time24Hour")
-    
+
     @ObservedObject var backgroundController = BackgroundFileUpdaterController.shared
-    
-    @State var test: String = ""
-    
+
     var body: some View {
         ZStack {
             VStack {
@@ -56,47 +56,39 @@ struct ContentView: View {
                     .foregroundColor(timeTextEnabled || crumbTextEnabled ? .green : .red)
                     .font(.title2)
                     .padding(20)
-                
+
                 // MARK: Configuration
                 // MARK: 24-Hour Time
-                //Toggle("24 Hour Time", isOn: $timeAs24).onChange(of: timeAs24) { new in
-                //    UserDefaults.standard.set(new, forKey: "Time24Hour")
+                //Toggle("24 Hour Time", isOn: $timeAs24).onChange(of: timeAs24) { value in
+                //    UserDefaults.standard.set(value, forKey: "Time24Hour")
                 //}
-                
+
                 // MARK: Seconds
-                Toggle("Seconds", isOn: $timeTextEnabled).onChange(of: timeTextEnabled) { new in
-                    if new {
-                        UserDefaults.standard.set(true, forKey: "TimeIsEnabled")
+                Toggle("Seconds", isOn: $timeTextEnabled).onChange(of: timeTextEnabled) { value in
+                    UserDefaults.standard.set(value, forKey: "TimeIsEnabled")
+
+                    if value {
                         setTimeSeconds()
                         backgroundController.time = 1.0
                         backgroundController.restartTimer()
-                        timeTextEnabled = StatusManager.sharedInstance().isTimeOverridden()
                     } else {
-                        UserDefaults.standard.set(false, forKey: "TimeIsEnabled")
                         backgroundController.time = 3600.0
                         backgroundController.restartTimer()
                         StatusManager.sharedInstance().unsetTime()
-                        timeTextEnabled = StatusManager.sharedInstance().isTimeOverridden()
                     }
+
+                    timeTextEnabled = StatusManager.sharedInstance().isTimeOverridden()
                 }
                 .padding(10)
-                
+
                 Divider()
-                
+
                 // MARK: Date
-                Toggle("Date", isOn: $crumbTextEnabled).onChange(of: crumbTextEnabled) { new in
-                    if new {
-                        UserDefaults.standard.set(true, forKey: "DateIsEnabled")
-                        setCrumbDate()
-                        crumbTextEnabled = StatusManager.sharedInstance().isCrumbOverridden()
-                    } else {
-                        UserDefaults.standard.set(false, forKey: "DateIsEnabled")
-                        StatusManager.sharedInstance().unsetCrumb()
-                        crumbTextEnabled = StatusManager.sharedInstance().isCrumbOverridden()
-                    }
+                Toggle("Date", isOn: $crumbTextEnabled).onChange(of: crumbTextEnabled) { value in
+                    enableCrumbDate(value: value)
                 }
                 .padding(10)
-                
+
                 // MARK: Date Format
                 HStack {
                     Text("Date Format")
@@ -110,7 +102,7 @@ struct ContentView: View {
                     }
                 }
                 .padding(10)
-                
+
                 Text("""
 "e": numeric day of week
 "E"-"EEE": short day of week
@@ -134,7 +126,7 @@ struct ContentView: View {
                 .padding(EdgeInsets(top: 0, leading: 10, bottom: 10, trailing: 10))
             }
             .padding()
-            
+
             VStack {
                 Spacer()
                 Text("Version \(Bundle.main.releaseVersionNumber ?? "UNKNOWN")")
@@ -142,7 +134,22 @@ struct ContentView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .onAppear {
+        .onContinueUserActivity(reEnableDateActivityType!, perform: { activity in
+            Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { (nil) in
+                enableCrumbDate(value: false)
+
+                Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { (nil) in
+                    enableCrumbDate(value: true)
+
+                    Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { (nil) in
+                        UIControl().sendAction(#selector(URLSessionTask.suspend), to: UIApplication.shared, for: nil)
+                    }
+                }
+            }
+        })
+        .onAppear(perform: {
+            donateReEnableDateActivity()
+
             if UserDefaults.standard.bool(forKey: "TimeIsEnabled") == true {
                 // check if it was disabled elsewhere
                 UserDefaults.standard.set(timeTextEnabled, forKey: "TimeIsEnabled")
@@ -150,24 +157,49 @@ struct ContentView: View {
                     backgroundController.time = 1.0
                 }
             }
-            
+
             if UserDefaults.standard.bool(forKey: "DateIsEnabled") == true {
                 // check if it was disabled elsewhere
                 UserDefaults.standard.set(crumbTextEnabled, forKey: "DateIsEnabled")
             }
-            
+
             backgroundController.setup()
+        })
+    }
+
+    func donateReEnableDateActivity() {
+        if reEnableDateActivityType != nil {
+            let activity = NSUserActivity(activityType: reEnableDateActivityType!)
+            activity.title = "Re-enable date breadcrumb"
+            activity.isEligibleForSearch = true
+            activity.isEligibleForPrediction = true
+            activity.isEligibleForHandoff = false
+            activity.persistentIdentifier = UUID().uuidString
+            //activity.becomeCurrent()
+            UIApplication.shared.windows.first?.rootViewController?.userActivity = activity
         }
     }
-    
+
+    func enableCrumbDate(value: Bool) {
+        UserDefaults.standard.set(value, forKey: "DateIsEnabled")
+
+        if value {
+            setCrumbDate()
+        } else {
+            StatusManager.sharedInstance().unsetCrumb()
+        }
+
+        crumbTextEnabled = StatusManager.sharedInstance().isCrumbOverridden()
+    }
+
     func showDateFormatAlert() {
         let alert = UIAlertController(title: "Input a date format", message: nil, preferredStyle: .alert)
-        
+
         alert.addTextField { (textField) in
             textField.text = dateFormat
             textField.placeholder = dateFormat
         }
-        
+
         alert.addAction(UIAlertAction(title: "OK", style: .default, handler: { [weak alert] _ in
             guard let textField = alert?.textFields?.first,
                   let newDateFormat = textField.text,
@@ -175,17 +207,17 @@ struct ContentView: View {
             else {
                 return
             }
-            
+
             dateFormat = newDateFormat.trimmingCharacters(in: .whitespaces)
             UserDefaults.standard.set(dateFormat, forKey: "DateFormat")
-            
+
             if crumbTextEnabled {
                 setCrumbDate()
             }
         }))
-        
+
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
-        
+
         UIApplication.shared.windows.first?.rootViewController?.present(alert, animated: true)
     }
 }

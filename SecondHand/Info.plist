@@ -11,5 +11,9 @@
 		<string>location</string>
 		<string>processing</string>
 	</array>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).reEnableDate</string>
+	</array>
 </dict>
 </plist>
